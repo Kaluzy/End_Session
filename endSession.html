@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>End Session</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 60px 40px;
+            text-align: center;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .icon {
+            font-size: 80px;
+            margin-bottom: 24px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 16px;
+            font-size: 32px;
+        }
+        
+        p {
+            color: #666;
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+        
+        .btn-signout {
+            background: #D32F2F;
+            color: white;
+            border: none;
+            padding: 20px 60px;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(211, 47, 47, 0.4);
+        }
+        
+        .btn-signout:hover {
+            background: #B71C1C;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(211, 47, 47, 0.6);
+        }
+        
+        .status {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 18px;
+        }
+        
+        .status.success {
+            background: #D4EDDA;
+            border: 2px solid #28A745;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #F8D7DA;
+            border: 2px solid #DC3545;
+            color: #721C24;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #D32F2F;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🚪</div>
+        <h1>End Your Session</h1>
+        <p>Click the button below to sign out and clear all your data from this device.</p>
+        
+        <button class="btn-signout" id="btnSignOut" onclick="endSession()">
+            END SESSION
+        </button>
+        
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        // Configuration - Update these values
+        const KNOX_API_URL = 'https://us.kcs.samsungknox.com/api';
+        const DEVICE_ID = getDeviceId(); // Will try to auto-detect
+        
+        function getDeviceId() {
+            // Try to get device ID from URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('deviceId') || null;
+        }
+        
+        async function endSession() {
+            const btn = document.getElementById('btnSignOut');
+            const status = document.getElementById('status');
+            
+            // Disable button
+            btn.disabled = true;
+            btn.innerHTML = 'Ending Session<span class="loading"></span>';
+            
+            try {
+                // Method 1: Try to call Knox Manage API
+                const knoxResult = await callKnoxAPI();
+                
+                if (knoxResult.success) {
+                    showStatus('Session ended successfully!', 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                    return;
+                }
+                
+                // Method 2: Fallback - Clear browser data
+                clearBrowserData();
+                
+                // Method 3: Try Microsoft logout
+                await microsoftLogout();
+                
+                showStatus('Session ended. Please reopen apps to sign in again.', 'success');
+                
+                setTimeout(() => {
+                    window.close();
+                }, 3000);
+                
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = 'END SESSION';
+            }
+        }
+        
+        async function callKnoxAPI() {
+            // This requires Knox Manage API credentials
+            // For security, this should be proxied through your backend
+            
+            if (!DEVICE_ID) {
+                console.log('No device ID available');
+                return { success: false };
+            }
+            
+            try {
+                // Example API call structure (you'll need to implement auth)
+                const response = await fetch(`${KNOX_API_URL}/devices/${DEVICE_ID}/actions/removeWorkProfile`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Add your Knox API credentials here
+                    }
+                });
+                
+                return { success: response.ok };
+            } catch (error) {
+                console.error('Knox API error:', error);
+                return { success: false };
+            }
+        }
+        
+        function clearBrowserData() {
+            // Clear local storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Clear cookies
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "")
+                    .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            
+            // Clear cache (service worker)
+            if ('caches' in window) {
+                caches.keys().then(function(names) {
+                    for (let name of names) caches.delete(name);
+                });
+            }
+        }
+        
+        async function microsoftLogout() {
+            // Redirect to Microsoft logout endpoint
+            const logoutUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/logout';
+            
+            // Open in iframe to trigger logout without leaving page
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = logoutUrl;
+            document.body.appendChild(iframe);
+            
+            // Wait 2 seconds for logout to complete
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+            status.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
